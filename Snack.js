@@ -2765,13 +2765,20 @@ export default function App() {
   const myPlayers = useMemo(() => players.filter(player => statuses[player.rank] === 'mine'), [statuses]);
   const favoritePlayers = useMemo(() => players.filter(player => favorites[player.rank]), [favorites]);
   const selectedPlayers = useMemo(() => players.filter(player => statuses[player.rank]), [statuses]);
+  const availablePlayers = useMemo(() => players.filter(player => !statuses[player.rank]), [statuses]);
   const draftedCount = selectedPlayers.length;
   const currentOverallPick = draftedCount + 1;
   const nextDraftPick = getNextSnakePick(currentOverallPick, draftSlot);
   const picksAway = nextDraftPick.overall - currentOverallPick;
   const projectedBeforeMyPick = useMemo(() => new Set(
-    players.filter(player => !statuses[player.rank]).slice(0, picksAway).map(player => player.rank)
-  ), [statuses, picksAway]);
+    availablePlayers.slice(0, picksAway).map(player => player.rank)
+  ), [availablePlayers, picksAway]);
+  const followingPick = getNextSnakePick(currentOverallPick + 1, draftSlot);
+  const picksUntilFollowingTurn = Math.max(0, followingPick.overall - currentOverallPick - 1);
+  const suggestion = useMemo(
+    () => getDraftSuggestion(availablePlayers, favorites, picksAway, picksUntilFollowingTurn),
+    [availablePlayers, favorites, picksAway, picksUntilFollowingTurn]
+  );
   const lineup = useMemo(() => buildLineup(myPlayers), [myPlayers]);
 
   function setPlayerStatus(player, next) {
@@ -2809,7 +2816,7 @@ export default function App() {
 
   function autoPickToMyTurn() {
     if (picksAway <= 0) return;
-    const autoSelected = players.filter(player => !statuses[player.rank]).slice(0, picksAway);
+    const autoSelected = availablePlayers.slice(0, picksAway);
     setStatuses(current => {
       const updated = { ...current };
       autoSelected.forEach(player => { updated[player.rank] = 'taken'; });
@@ -2907,6 +2914,28 @@ export default function App() {
               </View>
             )}
           </View>
+          {suggestion && (
+            <View style={[styles.suggestionCard, { backgroundColor: theme.card, borderColor: suggestion.favorite ? '#f59e0b' : '#818cf8' }]}>
+              <View style={styles.suggestionHeading}>
+                <View>
+                  <Text style={[styles.suggestionEyebrow, { color: suggestion.favorite ? '#b45309' : '#4f46e5' }]}>{suggestion.favorite ? '★ FAVORITE RECOMMENDATION' : 'RECOMMENDED NEXT'}</Text>
+                  <Text style={[styles.suggestionReason, { color: theme.secondary }]}>{suggestion.reason}</Text>
+                </View>
+                <Text style={[styles.suggestionRank, { color: theme.secondary }]}>#{suggestion.player.rank}</Text>
+              </View>
+              <View style={styles.suggestionPlayerRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.suggestionName, { color: theme.text }]}>{suggestion.player.name}</Text>
+                  <Text style={[styles.suggestionMeta, { color: theme.secondary }]}>{suggestion.player.position === 'DST' ? 'D/ST' : suggestion.player.position} · {suggestion.player.team} · Bye {suggestion.player.bye}</Text>
+                </View>
+                {picksAway === 0 && (
+                  <Pressable onPress={() => setPlayerStatus(suggestion.player, 'mine')} style={styles.draftSuggestionButton}>
+                    <Text style={styles.draftSuggestionButtonText}>Draft</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
           <TextInput
             value={search}
             onChangeText={setSearch}
@@ -3048,6 +3077,27 @@ function getNextSnakePick(currentOverallPick, draftSlot) {
   }
 }
 
+function getDraftSuggestion(availablePlayers, favorites, picksAway, picksUntilFollowingTurn) {
+  if (!availablePlayers.length) return null;
+
+  if (picksAway === 0) {
+    const urgentWindow = availablePlayers.slice(0, Math.max(1, picksUntilFollowingTurn + 1));
+    const urgentFavorite = urgentWindow.find(player => favorites[player.rank]);
+    if (urgentFavorite) {
+      return { player: urgentFavorite, favorite: true, reason: 'Starred player unlikely to last until your following pick' };
+    }
+    return { player: availablePlayers[0], favorite: Boolean(favorites[availablePlayers[0].rank]), reason: 'Best ESPN-ranked player currently available' };
+  }
+
+  const projectedWindow = availablePlayers.slice(picksAway, picksAway + 12);
+  const projectedFavorite = projectedWindow.find(player => favorites[player.rank]);
+  if (projectedFavorite) {
+    return { player: projectedFavorite, favorite: true, reason: 'Starred player projected near your upcoming pick' };
+  }
+  const projectedBest = availablePlayers[Math.min(picksAway, availablePlayers.length - 1)];
+  return { player: projectedBest, favorite: Boolean(favorites[projectedBest.rank]), reason: 'Projected best ESPN-ranked player at your upcoming pick' };
+}
+
 function EmptyLineupSlot({ label, theme }) {
   return (
     <View style={[styles.emptySlot, { borderColor: theme.border, backgroundColor: theme.card }]}>
@@ -3121,6 +3171,16 @@ const styles = StyleSheet.create({
   projectionLegend: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 9, paddingHorizontal: 2 },
   legendSwatch: { width: 18, height: 13, borderWidth: 1.5, borderRadius: 4 },
   projectionLegendText: { flex: 1, fontSize: 11, fontWeight: '700' },
+  suggestionCard: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1.5, borderRadius: 16, padding: 13 },
+  suggestionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  suggestionEyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
+  suggestionReason: { fontSize: 11, fontWeight: '600', marginTop: 3 },
+  suggestionRank: { fontSize: 14, fontWeight: '900' },
+  suggestionPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
+  suggestionName: { fontSize: 19, fontWeight: '900' },
+  suggestionMeta: { fontSize: 12, fontWeight: '700', marginTop: 3 },
+  draftSuggestionButton: { backgroundColor: '#16a34a', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 10 },
+  draftSuggestionButtonText: { color: '#ffffff', fontWeight: '900' },
   filterArea: { paddingTop: 10, paddingBottom: 8 },
   filterLabel: { paddingHorizontal: 16, marginBottom: 7, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
   filters: { paddingHorizontal: 16, gap: 9 },
