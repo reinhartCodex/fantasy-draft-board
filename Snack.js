@@ -2838,6 +2838,21 @@ export default function App() {
     />
   );
 
+  const boardRow = ({ item }) => (
+    <PlayerRow
+      player={item}
+      status={statuses[item.rank]}
+      favorite={Boolean(favorites[item.rank])}
+      theme={theme}
+      showMine={picksAway === 0}
+      showOther={picksAway > 0}
+      onMine={() => setPlayerStatus(item, 'mine')}
+      onTaken={() => setPlayerStatus(item, 'taken')}
+      onRestore={() => setPlayerStatus(item, null)}
+      onToggleFavorite={() => toggleFavorite(item)}
+    />
+  );
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
@@ -2903,7 +2918,7 @@ export default function App() {
               ))}
             </ScrollView>
           </View>
-          <FlatList data={filtered} renderItem={row} keyExtractor={item => String(item.rank)} contentContainerStyle={styles.list} />
+          <FlatList data={filtered} renderItem={boardRow} keyExtractor={item => String(item.rank)} contentContainerStyle={styles.list} />
         </>
       ) : tab === 'roster' && myPlayers.length ? (
         <>
@@ -3032,7 +3047,7 @@ function EmptyLineupSlot({ label, theme }) {
   );
 }
 
-function PlayerRow({ player, status, favorite, theme, slotLabel, showCrossout = true, onMine, onTaken, onRestore, onToggleFavorite }) {
+function PlayerRow({ player, status, favorite, theme, slotLabel, showCrossout = true, showMine = true, showOther = true, onMine, onTaken, onRestore, onToggleFavorite }) {
   return (
     <View style={[styles.row, { backgroundColor: theme.card, borderColor: status === 'mine' ? '#22c55e' : theme.border, opacity: status === 'taken' ? 0.58 : 1 }]}>
       <Text style={[slotLabel ? styles.slotLabel : styles.rank, { color: theme.secondary }]}>{slotLabel || player.rank}</Text>
@@ -3054,8 +3069,8 @@ function PlayerRow({ player, status, favorite, theme, slotLabel, showCrossout = 
           </>
         ) : (
           <>
-            <Pressable onPress={onMine} style={[styles.action, { backgroundColor: '#dcfce7' }]}><Text style={{ color: '#15803d', fontWeight: '800' }}>Mine</Text></Pressable>
-            <Pressable onPress={onTaken} style={[styles.action, { backgroundColor: '#fee2e2' }]}><Text style={{ color: '#b91c1c', fontWeight: '800' }}>Other</Text></Pressable>
+            {showMine && <Pressable onPress={onMine} style={[styles.action, { backgroundColor: '#dcfce7' }]}><Text style={{ color: '#15803d', fontWeight: '800' }}>Mine</Text></Pressable>}
+            {showOther && <Pressable onPress={onTaken} style={[styles.action, { backgroundColor: '#fee2e2' }]}><Text style={{ color: '#b91c1c', fontWeight: '800' }}>Other</Text></Pressable>}
           </>
         )}
       </View>
