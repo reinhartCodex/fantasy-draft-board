@@ -198,6 +198,12 @@ export default function App() {
                 {picksAway === 0 ? 'Make your pick to continue' : `Auto-pick ${picksAway} player${picksAway === 1 ? '' : 's'} to my turn`}
               </Text>
             </Pressable>
+            {picksAway > 0 && (
+              <View style={styles.projectionLegend}>
+                <View style={[styles.legendSwatch, { backgroundColor: theme.projected, borderColor: '#f59e0b' }]} />
+                <Text style={[styles.projectionLegendText, { color: theme.secondary }]}>Shaded players are projected before your next pick</Text>
+              </View>
+            )}
           </View>
           <TextInput
             value={search}
@@ -351,7 +357,7 @@ function EmptyLineupSlot({ label, theme }) {
 
 function PlayerRow({ player, status, favorite, projected = false, theme, slotLabel, showCrossout = true, showMine = true, showOther = true, onMine, onTaken, onRestore, onToggleFavorite }) {
   return (
-    <View style={[styles.row, { backgroundColor: projected ? theme.projected : theme.card, borderColor: status === 'mine' ? '#22c55e' : projected ? '#a5b4fc' : theme.border, opacity: status === 'taken' ? 0.58 : 1 }]}>
+    <View style={[styles.row, { backgroundColor: projected ? theme.projected : theme.card, borderColor: status === 'mine' ? '#22c55e' : projected ? '#f59e0b' : theme.border, borderLeftWidth: projected ? 4 : 1, opacity: status === 'taken' ? 0.58 : 1 }]}>
       <Text style={[slotLabel ? styles.slotLabel : styles.rank, { color: theme.secondary }]}>{slotLabel || player.rank}</Text>
       <Pressable onPress={onToggleFavorite} hitSlop={8} style={styles.starButton} accessibilityLabel={favorite ? 'Remove favorite' : 'Add favorite'}>
         <Text style={[styles.star, { color: favorite ? '#f59e0b' : theme.secondary }]}>{favorite ? '★' : '☆'}</Text>
@@ -362,6 +368,7 @@ function PlayerRow({ player, status, favorite, projected = false, theme, slotLab
           <Text style={[styles.badge, { backgroundColor: POSITION_COLORS[player.position] }]}>{player.position === 'DST' ? 'D/ST' : player.position}</Text>
           <Text style={[styles.meta, { color: theme.secondary }]}>{player.team}  •  Bye {player.bye}  •  ${player.value}</Text>
         </View>
+        {projected && <Text style={styles.projectedLabel}>BEFORE YOUR PICK</Text>}
       </View>
       <View style={styles.rowActions}>
         {status ? (
@@ -388,8 +395,8 @@ function TabButton({ active, icon, label, onPress }) {
   return <Pressable onPress={onPress} style={styles.tabButton}><Text style={[styles.tabIcon, { color: active ? '#4f46e5' : '#64748b' }]}>{icon}</Text><Text numberOfLines={1} style={[styles.tabLabel, { color: active ? '#4f46e5' : '#64748b' }]}>{label}</Text></Pressable>;
 }
 
-const lightTheme = { background: '#f8fafc', card: '#ffffff', projected: '#eef2ff', text: '#0f172a', secondary: '#64748b', border: '#e2e8f0' };
-const darkTheme = { background: '#0f172a', card: '#1e293b', projected: '#252b55', text: '#f8fafc', secondary: '#94a3b8', border: '#334155' };
+const lightTheme = { background: '#f8fafc', card: '#ffffff', projected: '#fff7d6', text: '#0f172a', secondary: '#64748b', border: '#e2e8f0' };
+const darkTheme = { background: '#0f172a', card: '#1e293b', projected: '#3f351d', text: '#f8fafc', secondary: '#94a3b8', border: '#334155' };
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
@@ -409,6 +416,9 @@ const styles = StyleSheet.create({
   pickDropdownValue: { fontSize: 15, fontWeight: '900', marginTop: 2 },
   clockBanner: { marginTop: 11, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8, flexDirection: 'row', justifyContent: 'space-between' },
   autoPickButton: { marginTop: 8, minHeight: 42, borderWidth: 1, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  projectionLegend: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 9, paddingHorizontal: 2 },
+  legendSwatch: { width: 18, height: 13, borderWidth: 1.5, borderRadius: 4 },
+  projectionLegendText: { flex: 1, fontSize: 11, fontWeight: '700' },
   filterArea: { paddingTop: 10, paddingBottom: 8 },
   filterLabel: { paddingHorizontal: 16, marginBottom: 7, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
   filters: { paddingHorizontal: 16, gap: 9 },
@@ -424,6 +434,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
   badge: { color: 'white', fontWeight: '900', fontSize: 10, overflow: 'hidden', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
   meta: { fontSize: 11, fontWeight: '600' },
+  projectedLabel: { color: '#b45309', fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 4 },
   rowActions: { gap: 5 },
   selectionTag: { fontSize: 9, fontWeight: '900', textAlign: 'center' },
   action: { minWidth: 49, alignItems: 'center', paddingHorizontal: 8, paddingVertical: 7, borderRadius: 9 },
