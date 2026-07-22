@@ -2804,6 +2804,20 @@ export default function App() {
     });
   }
 
+  function autoPickToMyTurn() {
+    if (picksAway <= 0) return;
+    const autoSelected = players.filter(player => !statuses[player.rank]).slice(0, picksAway);
+    setStatuses(current => {
+      const updated = { ...current };
+      autoSelected.forEach(player => { updated[player.rank] = 'taken'; });
+      return updated;
+    });
+    setHistory(items => [
+      ...items,
+      ...autoSelected.map(player => ({ rank: player.rank, previous: null })),
+    ]);
+  }
+
   function reset() {
     Alert.alert('Reset the entire draft?', 'All selections will be cleared.', [
       { text: 'Cancel', style: 'cancel' },
@@ -2858,6 +2872,15 @@ export default function App() {
               </Text>
               <Text style={{ color: picksAway === 0 ? '#15803d' : '#4338ca', fontWeight: '700' }}>{draftedCount} selected</Text>
             </View>
+            <Pressable
+              disabled={picksAway === 0}
+              onPress={autoPickToMyTurn}
+              style={[styles.autoPickButton, { backgroundColor: picksAway === 0 ? theme.background : '#4f46e5', borderColor: picksAway === 0 ? theme.border : '#4f46e5' }]}
+            >
+              <Text style={{ color: picksAway === 0 ? theme.secondary : '#ffffff', fontWeight: '900' }}>
+                {picksAway === 0 ? 'Make your pick to continue' : `Auto-pick ${picksAway} player${picksAway === 1 ? '' : 's'} to my turn`}
+              </Text>
+            </Pressable>
           </View>
           <TextInput
             value={search}
@@ -2901,6 +2924,7 @@ export default function App() {
                 favorite={Boolean(favorites[item.player.rank])}
                 theme={theme}
                 slotLabel={item.label}
+                showCrossout={false}
                 onMine={() => setPlayerStatus(item.player, 'mine')}
                 onTaken={() => setPlayerStatus(item.player, 'taken')}
                 onRestore={() => setPlayerStatus(item.player, null)}
@@ -3007,7 +3031,7 @@ function EmptyLineupSlot({ label, theme }) {
   );
 }
 
-function PlayerRow({ player, status, favorite, theme, slotLabel, onMine, onTaken, onRestore, onToggleFavorite }) {
+function PlayerRow({ player, status, favorite, theme, slotLabel, showCrossout = true, onMine, onTaken, onRestore, onToggleFavorite }) {
   return (
     <View style={[styles.row, { backgroundColor: theme.card, borderColor: status === 'mine' ? '#22c55e' : theme.border, opacity: status === 'taken' ? 0.58 : 1 }]}>
       <Text style={[slotLabel ? styles.slotLabel : styles.rank, { color: theme.secondary }]}>{slotLabel || player.rank}</Text>
@@ -3015,7 +3039,7 @@ function PlayerRow({ player, status, favorite, theme, slotLabel, onMine, onTaken
         <Text style={[styles.star, { color: favorite ? '#f59e0b' : theme.secondary }]}>{favorite ? '★' : '☆'}</Text>
       </Pressable>
       <View style={styles.playerInfo}>
-        <Text numberOfLines={1} style={[styles.name, { color: status ? theme.secondary : theme.text, textDecorationLine: status ? 'line-through' : 'none' }]}>{player.name}</Text>
+        <Text numberOfLines={1} style={[styles.name, { color: status && showCrossout ? theme.secondary : theme.text, textDecorationLine: status && showCrossout ? 'line-through' : 'none' }]}>{player.name}</Text>
         <View style={styles.metaRow}>
           <Text style={[styles.badge, { backgroundColor: POSITION_COLORS[player.position] }]}>{player.position === 'DST' ? 'D/ST' : player.position}</Text>
           <Text style={[styles.meta, { color: theme.secondary }]}>{player.team}  •  Bye {player.bye}  •  ${player.value}</Text>
@@ -3066,6 +3090,7 @@ const styles = StyleSheet.create({
   pickDropdownLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
   pickDropdownValue: { fontSize: 15, fontWeight: '900', marginTop: 2 },
   clockBanner: { marginTop: 11, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8, flexDirection: 'row', justifyContent: 'space-between' },
+  autoPickButton: { marginTop: 8, minHeight: 42, borderWidth: 1, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   filterArea: { paddingTop: 10, paddingBottom: 8 },
   filterLabel: { paddingHorizontal: 16, marginBottom: 7, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
   filters: { paddingHorizontal: 16, gap: 9 },
