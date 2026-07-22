@@ -67,6 +67,9 @@ export default function App() {
   const currentOverallPick = draftedCount + 1;
   const nextDraftPick = getNextSnakePick(currentOverallPick, draftSlot);
   const picksAway = nextDraftPick.overall - currentOverallPick;
+  const projectedBeforeMyPick = useMemo(() => new Set(
+    players.filter(player => !statuses[player.rank]).slice(0, picksAway).map(player => player.rank)
+  ), [statuses, picksAway]);
   const lineup = useMemo(() => buildLineup(myPlayers), [myPlayers]);
 
   function setPlayerStatus(player, next) {
@@ -142,6 +145,7 @@ export default function App() {
       status={statuses[item.rank]}
       favorite={Boolean(favorites[item.rank])}
       theme={theme}
+      projected={projectedBeforeMyPick.has(item.rank)}
       showMine={picksAway === 0}
       showOther={picksAway > 0}
       onMine={() => setPlayerStatus(item, 'mine')}
@@ -345,9 +349,9 @@ function EmptyLineupSlot({ label, theme }) {
   );
 }
 
-function PlayerRow({ player, status, favorite, theme, slotLabel, showCrossout = true, showMine = true, showOther = true, onMine, onTaken, onRestore, onToggleFavorite }) {
+function PlayerRow({ player, status, favorite, projected = false, theme, slotLabel, showCrossout = true, showMine = true, showOther = true, onMine, onTaken, onRestore, onToggleFavorite }) {
   return (
-    <View style={[styles.row, { backgroundColor: theme.card, borderColor: status === 'mine' ? '#22c55e' : theme.border, opacity: status === 'taken' ? 0.58 : 1 }]}>
+    <View style={[styles.row, { backgroundColor: projected ? theme.projected : theme.card, borderColor: status === 'mine' ? '#22c55e' : projected ? '#a5b4fc' : theme.border, opacity: status === 'taken' ? 0.58 : 1 }]}>
       <Text style={[slotLabel ? styles.slotLabel : styles.rank, { color: theme.secondary }]}>{slotLabel || player.rank}</Text>
       <Pressable onPress={onToggleFavorite} hitSlop={8} style={styles.starButton} accessibilityLabel={favorite ? 'Remove favorite' : 'Add favorite'}>
         <Text style={[styles.star, { color: favorite ? '#f59e0b' : theme.secondary }]}>{favorite ? '★' : '☆'}</Text>
@@ -384,8 +388,8 @@ function TabButton({ active, icon, label, onPress }) {
   return <Pressable onPress={onPress} style={styles.tabButton}><Text style={[styles.tabIcon, { color: active ? '#4f46e5' : '#64748b' }]}>{icon}</Text><Text numberOfLines={1} style={[styles.tabLabel, { color: active ? '#4f46e5' : '#64748b' }]}>{label}</Text></Pressable>;
 }
 
-const lightTheme = { background: '#f8fafc', card: '#ffffff', text: '#0f172a', secondary: '#64748b', border: '#e2e8f0' };
-const darkTheme = { background: '#0f172a', card: '#1e293b', text: '#f8fafc', secondary: '#94a3b8', border: '#334155' };
+const lightTheme = { background: '#f8fafc', card: '#ffffff', projected: '#eef2ff', text: '#0f172a', secondary: '#64748b', border: '#e2e8f0' };
+const darkTheme = { background: '#0f172a', card: '#1e293b', projected: '#252b55', text: '#f8fafc', secondary: '#94a3b8', border: '#334155' };
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
