@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -2731,6 +2732,8 @@ export default function App() {
   const [favorites, setFavorites] = useState({});
   const [history, setHistory] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [draftSlot, setDraftSlot] = useState(1);
+  const [showPickSelector, setShowPickSelector] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -2740,25 +2743,32 @@ export default function App() {
           setStatuses(saved.statuses || {});
           setFavorites(saved.favorites || {});
           setHistory(saved.history || []);
+          setDraftSlot(saved.draftSlot || 1);
         }
       })
       .finally(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
-    if (loaded) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, favorites, history }));
-  }, [statuses, favorites, history, loaded]);
+    if (loaded) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, favorites, history, draftSlot }));
+  }, [statuses, favorites, history, draftSlot, loaded]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return players.filter(player =>
+      !statuses[player.rank] &&
       (position === 'ALL' || player.position === position) &&
       (!query || player.name.toLowerCase().includes(query) || player.team.toLowerCase().includes(query))
     );
-  }, [position, search]);
+  }, [position, search, statuses]);
 
   const myPlayers = useMemo(() => players.filter(player => statuses[player.rank] === 'mine'), [statuses]);
   const favoritePlayers = useMemo(() => players.filter(player => favorites[player.rank]), [favorites]);
+  const selectedPlayers = useMemo(() => players.filter(player => statuses[player.rank]), [statuses]);
+  const draftedCount = selectedPlayers.length;
+  const currentOverallPick = draftedCount + 1;
+  const nextDraftPick = getNextSnakePick(currentOverallPick, draftSlot);
+  const picksAway = nextDraftPick.overall - currentOverallPick;
   const lineup = useMemo(() => buildLineup(myPlayers), [myPlayers]);
 
   function setPlayerStatus(player, next) {
@@ -2819,7 +2829,7 @@ export default function App() {
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
         <View>
-          <Text style={[styles.title, { color: theme.text }]}>{tab === 'board' ? 'Draft Board' : tab === 'roster' ? 'My Team' : 'Favorites'}</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{tab === 'board' ? 'Draft Board' : tab === 'roster' ? 'My Team' : tab === 'favorites' ? 'Favorites' : 'Selected'}</Text>
           <Text style={[styles.subtitle, { color: theme.secondary }]}>ESPN 2026 PPR Top 300</Text>
         </View>
         <View style={styles.headerActions}>
@@ -2830,6 +2840,25 @@ export default function App() {
 
       {tab === 'board' ? (
         <>
+          <View style={[styles.draftTracker, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.draftTrackerTop}>
+              <View>
+                <Text style={[styles.trackerLabel, { color: theme.secondary }]}>12-TEAM SNAKE DRAFT</Text>
+                <Text style={[styles.trackerTitle, { color: theme.text }]}>Next pick #{nextDraftPick.overall}</Text>
+                <Text style={[styles.trackerDetail, { color: theme.secondary }]}>Round {nextDraftPick.round} · Pick {nextDraftPick.roundPick}</Text>
+              </View>
+              <Pressable onPress={() => setShowPickSelector(true)} style={[styles.pickDropdown, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                <Text style={[styles.pickDropdownLabel, { color: theme.secondary }]}>YOUR SLOT</Text>
+                <Text style={[styles.pickDropdownValue, { color: theme.text }]}>Pick {draftSlot} ▾</Text>
+              </Pressable>
+            </View>
+            <View style={[styles.clockBanner, { backgroundColor: picksAway === 0 ? '#dcfce7' : '#e0e7ff' }]}>
+              <Text style={{ color: picksAway === 0 ? '#15803d' : '#4338ca', fontWeight: '900' }}>
+                {picksAway === 0 ? 'You are on the clock!' : `${picksAway} pick${picksAway === 1 ? '' : 's'} until your turn`}
+              </Text>
+              <Text style={{ color: picksAway === 0 ? '#15803d' : '#4338ca', fontWeight: '700' }}>{draftedCount} selected</Text>
+            </View>
+          </View>
           <TextInput
             value={search}
             onChangeText={setSearch}
@@ -2884,19 +2913,42 @@ export default function App() {
         </>
       ) : tab === 'favorites' && favoritePlayers.length ? (
         <FlatList data={favoritePlayers} renderItem={row} keyExtractor={item => String(item.rank)} contentContainerStyle={styles.list} />
+      ) : tab === 'selected' && selectedPlayers.length ? (
+        <FlatList data={selectedPlayers} renderItem={row} keyExtractor={item => String(item.rank)} contentContainerStyle={styles.list} />
       ) : (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>{tab === 'favorites' ? '☆' : '🏈'}</Text>
-          <Text style={[styles.emptyTitle, { color: theme.text }]}>{tab === 'favorites' ? 'No favorites yet' : 'Your team is empty'}</Text>
-          <Text style={[styles.emptyText, { color: theme.secondary }]}>{tab === 'favorites' ? 'Tap the star beside any player to add them here.' : 'Go to Draft Board and tap “My Team” on a player.'}</Text>
+          <Text style={styles.emptyIcon}>{tab === 'favorites' ? '☆' : tab === 'selected' ? '✓' : '🏈'}</Text>
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>{tab === 'favorites' ? 'No favorites yet' : tab === 'selected' ? 'No selections yet' : 'Your team is empty'}</Text>
+          <Text style={[styles.emptyText, { color: theme.secondary }]}>{tab === 'favorites' ? 'Tap the star beside any player to add them here.' : tab === 'selected' ? 'Drafted players will appear here.' : 'Go to Draft Board and tap “My Team” on a player.'}</Text>
         </View>
       )}
 
       <View style={[styles.tabs, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
-        <TabButton active={tab === 'board'} label='☷  Draft Board' onPress={() => setTab('board')} />
-        <TabButton active={tab === 'roster'} label={`♟  My Team (${myPlayers.length})`} onPress={() => setTab('roster')} />
-        <TabButton active={tab === 'favorites'} label={`★  Favorites (${favoritePlayers.length})`} onPress={() => setTab('favorites')} />
+        <TabButton active={tab === 'board'} icon='☷' label='Draft' onPress={() => setTab('board')} />
+        <TabButton active={tab === 'roster'} icon='♟' label={`Team ${myPlayers.length}`} onPress={() => setTab('roster')} />
+        <TabButton active={tab === 'favorites'} icon='★' label={`Stars ${favoritePlayers.length}`} onPress={() => setTab('favorites')} />
+        <TabButton active={tab === 'selected'} icon='✓' label={`Selected ${selectedPlayers.length}`} onPress={() => setTab('selected')} />
       </View>
+
+      <Modal visible={showPickSelector} transparent animationType='fade' onRequestClose={() => setShowPickSelector(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowPickSelector(false)}>
+          <Pressable style={[styles.pickModal, { backgroundColor: theme.card }]} onPress={() => {}}>
+            <Text style={[styles.pickModalTitle, { color: theme.text }]}>Choose your draft position</Text>
+            <Text style={[styles.pickModalSubtitle, { color: theme.secondary }]}>12-team snake draft</Text>
+            <View style={styles.pickGrid}>
+              {Array.from({ length: 12 }, (_, index) => index + 1).map(slot => (
+                <Pressable
+                  key={slot}
+                  onPress={() => { setDraftSlot(slot); setShowPickSelector(false); }}
+                  style={[styles.pickOption, { backgroundColor: draftSlot === slot ? '#4f46e5' : theme.background, borderColor: draftSlot === slot ? '#4f46e5' : theme.border }]}
+                >
+                  <Text style={{ color: draftSlot === slot ? '#ffffff' : theme.text, fontWeight: '900', fontSize: 17 }}>{slot}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2935,6 +2987,17 @@ function buildLineup(selectedPlayers) {
   ];
 }
 
+function getNextSnakePick(currentOverallPick, draftSlot) {
+  let round = Math.floor((currentOverallPick - 1) / 12) + 1;
+  while (true) {
+    const overall = (round - 1) * 12 + (round % 2 === 1 ? draftSlot : 13 - draftSlot);
+    if (overall >= currentOverallPick) {
+      return { overall, round, roundPick: round % 2 === 1 ? draftSlot : 13 - draftSlot };
+    }
+    round += 1;
+  }
+}
+
 function EmptyLineupSlot({ label, theme }) {
   return (
     <View style={[styles.emptySlot, { borderColor: theme.border, backgroundColor: theme.card }]}>
@@ -2960,7 +3023,10 @@ function PlayerRow({ player, status, favorite, theme, slotLabel, onMine, onTaken
       </View>
       <View style={styles.rowActions}>
         {status ? (
-          <Pressable onPress={onRestore} style={[styles.action, { backgroundColor: '#e0e7ff' }]}><Text style={{ color: '#4338ca', fontWeight: '800' }}>Undo</Text></Pressable>
+          <>
+            <Text style={[styles.selectionTag, { color: status === 'mine' ? '#15803d' : '#b91c1c' }]}>{status === 'mine' ? 'MY TEAM' : 'OTHER'}</Text>
+            <Pressable onPress={onRestore} style={[styles.action, { backgroundColor: '#e0e7ff' }]}><Text style={{ color: '#4338ca', fontWeight: '800' }}>Undo</Text></Pressable>
+          </>
         ) : (
           <>
             <Pressable onPress={onMine} style={[styles.action, { backgroundColor: '#dcfce7' }]}><Text style={{ color: '#15803d', fontWeight: '800' }}>Mine</Text></Pressable>
@@ -2976,8 +3042,8 @@ function SmallButton({ label, onPress, disabled, theme, danger }) {
   return <Pressable disabled={disabled} onPress={onPress} style={[styles.smallButton, { backgroundColor: theme.card, opacity: disabled ? 0.35 : 1 }]}><Text style={{ color: danger ? '#dc2626' : theme.text, fontWeight: '800' }}>{label}</Text></Pressable>;
 }
 
-function TabButton({ active, label, onPress }) {
-  return <Pressable onPress={onPress} style={styles.tabButton}><Text style={{ color: active ? '#4f46e5' : '#64748b', fontWeight: '800' }}>{label}</Text></Pressable>;
+function TabButton({ active, icon, label, onPress }) {
+  return <Pressable onPress={onPress} style={styles.tabButton}><Text style={[styles.tabIcon, { color: active ? '#4f46e5' : '#64748b' }]}>{icon}</Text><Text numberOfLines={1} style={[styles.tabLabel, { color: active ? '#4f46e5' : '#64748b' }]}>{label}</Text></Pressable>;
 }
 
 const lightTheme = { background: '#f8fafc', card: '#ffffff', text: '#0f172a', secondary: '#64748b', border: '#e2e8f0' };
@@ -2991,6 +3057,15 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', gap: 7 },
   smallButton: { minHeight: 38, paddingHorizontal: 12, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   search: { marginHorizontal: 16, paddingHorizontal: 14, height: 44, borderRadius: 13, fontSize: 16 },
+  draftTracker: { marginHorizontal: 16, marginBottom: 10, borderWidth: 1, borderRadius: 16, padding: 13 },
+  draftTrackerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  trackerLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  trackerTitle: { fontSize: 21, fontWeight: '900', marginTop: 3 },
+  trackerDetail: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  pickDropdown: { minWidth: 91, borderWidth: 1, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 8 },
+  pickDropdownLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  pickDropdownValue: { fontSize: 15, fontWeight: '900', marginTop: 2 },
+  clockBanner: { marginTop: 11, borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8, flexDirection: 'row', justifyContent: 'space-between' },
   filterArea: { paddingTop: 10, paddingBottom: 8 },
   filterLabel: { paddingHorizontal: 16, marginBottom: 7, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
   filters: { paddingHorizontal: 16, gap: 9 },
@@ -3007,6 +3082,7 @@ const styles = StyleSheet.create({
   badge: { color: 'white', fontWeight: '900', fontSize: 10, overflow: 'hidden', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
   meta: { fontSize: 11, fontWeight: '600' },
   rowActions: { gap: 5 },
+  selectionTag: { fontSize: 9, fontWeight: '900', textAlign: 'center' },
   action: { minWidth: 49, alignItems: 'center', paddingHorizontal: 8, paddingVertical: 7, borderRadius: 9 },
   summary: { marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 14, flexDirection: 'row', justifyContent: 'space-between' },
   sectionHeader: { paddingHorizontal: 5, paddingVertical: 8, flexDirection: 'row', justifyContent: 'space-between' },
@@ -3020,5 +3096,13 @@ const styles = StyleSheet.create({
   emptyTitle: { fontWeight: '900', fontSize: 22 },
   emptyText: { textAlign: 'center', marginTop: 8, lineHeight: 20 },
   tabs: { minHeight: 61, flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
-  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
+  tabIcon: { fontSize: 17, fontWeight: '900', lineHeight: 20 },
+  tabLabel: { fontSize: 10, fontWeight: '900', marginTop: 2 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  pickModal: { width: '100%', maxWidth: 360, borderRadius: 20, padding: 20 },
+  pickModalTitle: { fontSize: 21, fontWeight: '900', textAlign: 'center' },
+  pickModalSubtitle: { fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 4, marginBottom: 18 },
+  pickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+  pickOption: { width: 64, height: 48, borderWidth: 1.5, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });
