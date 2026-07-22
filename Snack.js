@@ -5,7 +5,6 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
-  SectionList,
   StatusBar,
   StyleSheet,
   Text,
@@ -2760,11 +2759,7 @@ export default function App() {
 
   const myPlayers = useMemo(() => players.filter(player => statuses[player.rank] === 'mine'), [statuses]);
   const favoritePlayers = useMemo(() => players.filter(player => favorites[player.rank]), [favorites]);
-  const rosterSections = useMemo(() =>
-    POSITIONS.slice(1).map(pos => ({
-      title: pos,
-      data: myPlayers.filter(player => player.position === pos),
-    })).filter(section => section.data.length), [myPlayers]);
+  const lineup = useMemo(() => buildLineup(myPlayers), [myPlayers]);
 
   function setPlayerStatus(player, next) {
     const previous = statuses[player.rank] || null;
@@ -2864,16 +2859,26 @@ export default function App() {
             <Text style={{ color: theme.secondary, fontWeight: '700' }}>{myPlayers.length} players</Text>
             <Text style={{ color: theme.secondary, fontWeight: '700' }}>${myPlayers.reduce((sum, p) => sum + p.value, 0)} value</Text>
           </View>
-          <SectionList
-            sections={rosterSections}
-            renderItem={row}
-            keyExtractor={item => String(item.rank)}
+          <FlatList
+            data={lineup}
+            keyExtractor={item => item.id}
             contentContainerStyle={styles.list}
-            renderSectionHeader={({ section }) => (
-              <View style={[styles.sectionHeader, { backgroundColor: theme.background }]}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>{section.title === 'DST' ? 'D/ST' : section.title}</Text>
-                <Text style={{ color: theme.secondary }}>{section.data.length}</Text>
-              </View>
+            renderItem={({ item }) => item.header ? (
+              <Text style={[styles.lineupHeader, { color: theme.secondary }]}>{item.header}</Text>
+            ) : item.player ? (
+              <PlayerRow
+                player={item.player}
+                status='mine'
+                favorite={Boolean(favorites[item.player.rank])}
+                theme={theme}
+                slotLabel={item.label}
+                onMine={() => setPlayerStatus(item.player, 'mine')}
+                onTaken={() => setPlayerStatus(item.player, 'taken')}
+                onRestore={() => setPlayerStatus(item.player, null)}
+                onToggleFavorite={() => toggleFavorite(item.player)}
+              />
+            ) : (
+              <EmptyLineupSlot label={item.label} theme={theme} />
             )}
           />
         </>
@@ -2896,10 +2901,53 @@ export default function App() {
   );
 }
 
-function PlayerRow({ player, status, favorite, theme, onMine, onTaken, onRestore, onToggleFavorite }) {
+function buildLineup(selectedPlayers) {
+  const pool = [...selectedPlayers];
+  const take = eligible => {
+    const index = pool.findIndex(player => eligible.includes(player.position));
+    return index < 0 ? null : pool.splice(index, 1)[0];
+  };
+  const starters = [
+    ['QB', ['QB']],
+    ['RB', ['RB']],
+    ['RB', ['RB']],
+    ['WR', ['WR']],
+    ['WR', ['WR']],
+    ['WR', ['WR']],
+    ['FLEX', ['RB', 'WR', 'TE']],
+    ['K', ['K']],
+    ['D/ST', ['DST']],
+  ].map(([label, eligible], index) => ({ id: `starter-${index}`, label, player: take(eligible) }));
+
+  const bench = Array.from({ length: 6 }, (_, index) => ({
+    id: `bench-${index}`,
+    label: `BN ${index + 1}`,
+    player: pool[index] || null,
+  }));
+  const overflow = pool.slice(6).map((player, index) => ({ id: `over-${player.rank}`, label: 'OVER', player }));
+
+  return [
+    { id: 'starters-header', header: 'STARTING LINEUP' },
+    ...starters,
+    { id: 'bench-header', header: 'BENCH · 6 SPOTS' },
+    ...bench,
+    ...(overflow.length ? [{ id: 'overflow-header', header: 'OVER ROSTER LIMIT' }, ...overflow] : []),
+  ];
+}
+
+function EmptyLineupSlot({ label, theme }) {
+  return (
+    <View style={[styles.emptySlot, { borderColor: theme.border, backgroundColor: theme.card }]}>
+      <Text style={[styles.slotLabel, { color: theme.secondary }]}>{label}</Text>
+      <Text style={[styles.emptySlotText, { color: theme.secondary }]}>Empty</Text>
+    </View>
+  );
+}
+
+function PlayerRow({ player, status, favorite, theme, slotLabel, onMine, onTaken, onRestore, onToggleFavorite }) {
   return (
     <View style={[styles.row, { backgroundColor: theme.card, borderColor: status === 'mine' ? '#22c55e' : theme.border, opacity: status === 'taken' ? 0.58 : 1 }]}>
-      <Text style={[styles.rank, { color: theme.secondary }]}>{player.rank}</Text>
+      <Text style={[slotLabel ? styles.slotLabel : styles.rank, { color: theme.secondary }]}>{slotLabel || player.rank}</Text>
       <Pressable onPress={onToggleFavorite} hitSlop={8} style={styles.starButton} accessibilityLabel={favorite ? 'Remove favorite' : 'Add favorite'}>
         <Text style={[styles.star, { color: favorite ? '#f59e0b' : theme.secondary }]}>{favorite ? '★' : '☆'}</Text>
       </Pressable>
@@ -2963,6 +3011,10 @@ const styles = StyleSheet.create({
   summary: { marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 14, flexDirection: 'row', justifyContent: 'space-between' },
   sectionHeader: { paddingHorizontal: 5, paddingVertical: 8, flexDirection: 'row', justifyContent: 'space-between' },
   sectionTitle: { fontWeight: '900', fontSize: 17 },
+  lineupHeader: { fontSize: 11, fontWeight: '900', letterSpacing: 0.9, marginTop: 8, marginBottom: 7, marginHorizontal: 4 },
+  slotLabel: { width: 44, textAlign: 'center', fontSize: 11, fontWeight: '900' },
+  emptySlot: { minHeight: 58, borderRadius: 14, marginBottom: 8, paddingHorizontal: 10, borderWidth: 1, borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center', gap: 15 },
+  emptySlotText: { fontSize: 14, fontWeight: '700' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 },
   emptyIcon: { fontSize: 50, marginBottom: 10 },
   emptyTitle: { fontWeight: '900', fontSize: 22 },
