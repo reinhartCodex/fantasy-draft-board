@@ -2729,6 +2729,7 @@ export default function App() {
   const [position, setPosition] = useState('ALL');
   const [search, setSearch] = useState('');
   const [statuses, setStatuses] = useState({});
+  const [favorites, setFavorites] = useState({});
   const [history, setHistory] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -2738,6 +2739,7 @@ export default function App() {
         if (value) {
           const saved = JSON.parse(value);
           setStatuses(saved.statuses || {});
+          setFavorites(saved.favorites || {});
           setHistory(saved.history || []);
         }
       })
@@ -2745,8 +2747,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (loaded) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, history }));
-  }, [statuses, history, loaded]);
+    if (loaded) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, favorites, history }));
+  }, [statuses, favorites, history, loaded]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -2757,6 +2759,7 @@ export default function App() {
   }, [position, search]);
 
   const myPlayers = useMemo(() => players.filter(player => statuses[player.rank] === 'mine'), [statuses]);
+  const favoritePlayers = useMemo(() => players.filter(player => favorites[player.rank]), [favorites]);
   const rosterSections = useMemo(() =>
     POSITIONS.slice(1).map(pos => ({
       title: pos,
@@ -2787,6 +2790,15 @@ export default function App() {
     setHistory(items => items.slice(0, -1));
   }
 
+  function toggleFavorite(player) {
+    setFavorites(current => {
+      const updated = { ...current };
+      if (updated[player.rank]) delete updated[player.rank];
+      else updated[player.rank] = true;
+      return updated;
+    });
+  }
+
   function reset() {
     Alert.alert('Reset the entire draft?', 'All selections will be cleared.', [
       { text: 'Cancel', style: 'cancel' },
@@ -2798,10 +2810,12 @@ export default function App() {
     <PlayerRow
       player={item}
       status={statuses[item.rank]}
+      favorite={Boolean(favorites[item.rank])}
       theme={theme}
       onMine={() => setPlayerStatus(item, 'mine')}
       onTaken={() => setPlayerStatus(item, 'taken')}
       onRestore={() => setPlayerStatus(item, null)}
+      onToggleFavorite={() => toggleFavorite(item)}
     />
   );
 
@@ -2810,7 +2824,7 @@ export default function App() {
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
         <View>
-          <Text style={[styles.title, { color: theme.text }]}>{tab === 'board' ? 'Draft Board' : 'My Team'}</Text>
+          <Text style={[styles.title, { color: theme.text }]}>{tab === 'board' ? 'Draft Board' : tab === 'roster' ? 'My Team' : 'Favorites'}</Text>
           <Text style={[styles.subtitle, { color: theme.secondary }]}>ESPN 2026 PPR Top 300</Text>
         </View>
         <View style={styles.headerActions}>
@@ -2828,16 +2842,23 @@ export default function App() {
             placeholderTextColor={theme.secondary}
             style={[styles.search, { color: theme.text, backgroundColor: theme.card }]}
           />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-            {POSITIONS.map(pos => (
-              <Pressable key={pos} onPress={() => setPosition(pos)} style={[styles.filter, { backgroundColor: position === pos ? '#4f46e5' : theme.card }]}>
-                <Text style={{ color: position === pos ? 'white' : theme.text, fontWeight: '700' }}>{pos === 'DST' ? 'D/ST' : pos === 'ALL' ? 'All' : pos}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <View style={styles.filterArea}>
+            <Text style={[styles.filterLabel, { color: theme.secondary }]}>FILTER BY POSITION</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+              {POSITIONS.map(pos => (
+                <Pressable
+                  key={pos}
+                  onPress={() => setPosition(pos)}
+                  style={[styles.filter, { backgroundColor: position === pos ? '#4f46e5' : theme.card, borderColor: position === pos ? '#4f46e5' : theme.border }]}
+                >
+                  <Text style={[styles.filterText, { color: position === pos ? '#ffffff' : theme.text }]}>{pos === 'DST' ? 'D/ST' : pos === 'ALL' ? 'ALL' : pos}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
           <FlatList data={filtered} renderItem={row} keyExtractor={item => String(item.rank)} contentContainerStyle={styles.list} />
         </>
-      ) : myPlayers.length ? (
+      ) : tab === 'roster' && myPlayers.length ? (
         <>
           <View style={[styles.summary, { backgroundColor: theme.card }]}>
             <Text style={{ color: theme.secondary, fontWeight: '700' }}>{myPlayers.length} players</Text>
@@ -2856,26 +2877,32 @@ export default function App() {
             )}
           />
         </>
+      ) : tab === 'favorites' && favoritePlayers.length ? (
+        <FlatList data={favoritePlayers} renderItem={row} keyExtractor={item => String(item.rank)} contentContainerStyle={styles.list} />
       ) : (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>🏈</Text>
-          <Text style={[styles.emptyTitle, { color: theme.text }]}>Your team is empty</Text>
-          <Text style={[styles.emptyText, { color: theme.secondary }]}>Go to Draft Board and tap “My Team” on a player.</Text>
+          <Text style={styles.emptyIcon}>{tab === 'favorites' ? '☆' : '🏈'}</Text>
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>{tab === 'favorites' ? 'No favorites yet' : 'Your team is empty'}</Text>
+          <Text style={[styles.emptyText, { color: theme.secondary }]}>{tab === 'favorites' ? 'Tap the star beside any player to add them here.' : 'Go to Draft Board and tap “My Team” on a player.'}</Text>
         </View>
       )}
 
       <View style={[styles.tabs, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
         <TabButton active={tab === 'board'} label='☷  Draft Board' onPress={() => setTab('board')} />
         <TabButton active={tab === 'roster'} label={`♟  My Team (${myPlayers.length})`} onPress={() => setTab('roster')} />
+        <TabButton active={tab === 'favorites'} label={`★  Favorites (${favoritePlayers.length})`} onPress={() => setTab('favorites')} />
       </View>
     </SafeAreaView>
   );
 }
 
-function PlayerRow({ player, status, theme, onMine, onTaken, onRestore }) {
+function PlayerRow({ player, status, favorite, theme, onMine, onTaken, onRestore, onToggleFavorite }) {
   return (
     <View style={[styles.row, { backgroundColor: theme.card, borderColor: status === 'mine' ? '#22c55e' : theme.border, opacity: status === 'taken' ? 0.58 : 1 }]}>
       <Text style={[styles.rank, { color: theme.secondary }]}>{player.rank}</Text>
+      <Pressable onPress={onToggleFavorite} hitSlop={8} style={styles.starButton} accessibilityLabel={favorite ? 'Remove favorite' : 'Add favorite'}>
+        <Text style={[styles.star, { color: favorite ? '#f59e0b' : theme.secondary }]}>{favorite ? '★' : '☆'}</Text>
+      </Pressable>
       <View style={styles.playerInfo}>
         <Text numberOfLines={1} style={[styles.name, { color: status ? theme.secondary : theme.text, textDecorationLine: status ? 'line-through' : 'none' }]}>{player.name}</Text>
         <View style={styles.metaRow}>
@@ -2916,11 +2943,16 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', gap: 7 },
   smallButton: { minHeight: 38, paddingHorizontal: 12, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   search: { marginHorizontal: 16, paddingHorizontal: 14, height: 44, borderRadius: 13, fontSize: 16 },
-  filters: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  filter: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  filterArea: { paddingTop: 10, paddingBottom: 8 },
+  filterLabel: { paddingHorizontal: 16, marginBottom: 7, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
+  filters: { paddingHorizontal: 16, gap: 9 },
+  filter: { minWidth: 52, minHeight: 40, paddingHorizontal: 15, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  filterText: { fontSize: 14, fontWeight: '900', letterSpacing: 0.3 },
   list: { paddingHorizontal: 12, paddingBottom: 16 },
   row: { minHeight: 72, borderRadius: 14, marginBottom: 8, padding: 10, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
   rank: { width: 28, textAlign: 'right', fontWeight: '800', fontVariant: ['tabular-nums'] },
+  starButton: { width: 30, height: 40, alignItems: 'center', justifyContent: 'center' },
+  star: { fontSize: 27, lineHeight: 31 },
   playerInfo: { flex: 1, minWidth: 0 },
   name: { fontWeight: '800', fontSize: 15 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
@@ -2936,5 +2968,5 @@ const styles = StyleSheet.create({
   emptyTitle: { fontWeight: '900', fontSize: 22 },
   emptyText: { textAlign: 'center', marginTop: 8, lineHeight: 20 },
   tabs: { minHeight: 61, flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
-  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  tabButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
 });
